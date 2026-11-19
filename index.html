@@ -272,6 +272,42 @@ h3.gruppe{display:inline-block;color:#fff;background:var(--g,var(--accent));bord
   header.kopf{padding:12px 14px;border-radius:18px}
   header.kopf h1{font-size:1.2rem}
 }
+/* ---- Übersicht: breiter am PC, Gruppen zum Aufklappen, Suche, Weitermachen ---- */
+#app.breit{max-width:1080px}
+.kachel .klein{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.kachel{min-height:0}
+.suchzeile{margin:0 0 14px}
+.suchzeile input{width:100%;box-sizing:border-box;font:inherit;font-size:1.05rem;padding:12px 16px;border-radius:999px;border:2px solid var(--line);background:var(--card);color:inherit;box-shadow:var(--schatten)}
+.suchzeile input:focus{outline:none;border-color:var(--accent)}
+.weiter{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:14px}
+.weiterknopf{display:flex;flex-direction:column;gap:2px;text-align:left;font:inherit;color:#fff;cursor:pointer;border:0;border-radius:18px;padding:12px 16px;background:linear-gradient(135deg,#7c3aed,#db2777);box-shadow:var(--schatten)}
+.weiterknopf.zweit{background:var(--card);color:inherit;border:2px dashed var(--line)}
+.weiterknopf b{font-family:var(--titel);font-size:1.05rem}
+.weiterknopf .klein2{font-size:.85rem;opacity:.9}
+.weiterknopf:hover{transform:translateY(-2px)}
+.hauptkacheln{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));margin-bottom:18px}
+.hauptkacheln .kachel{padding:12px 14px}
+.hauptkacheln .kachel .sym{width:40px;height:40px;font-size:1.6rem}
+details.gruppenbox{background:var(--card);border-radius:18px;box-shadow:var(--schatten);margin:0 0 10px;border-left:6px solid var(--g,var(--accent));overflow:hidden}
+details.gruppenbox>summary{list-style:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;padding:12px 16px;cursor:pointer;color:inherit;margin:0}
+details.gruppenbox>summary::-webkit-details-marker{display:none}
+details.gruppenbox>summary::before{content:"▸";color:var(--g,var(--accent));font-weight:700;margin-right:-4px;transition:transform .15s ease}
+details.gruppenbox[open]>summary::before{transform:rotate(90deg)}
+details.gruppenbox .gname{flex:1;font-family:var(--titel);font-weight:700;font-size:1.05rem}
+details.gruppenbox .ginfo{font-size:.85rem;color:var(--muted)}
+details.gruppenbox>.kacheln{padding:4px 14px 16px}
+.fusszeile{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.suchtreffer{display:flex;gap:12px;align-items:center;width:100%;text-align:left;font:inherit;color:inherit;background:transparent;border:0;border-bottom:1px solid var(--line);padding:10px 4px;cursor:pointer}
+.suchtreffer:hover{background:var(--accent-soft)}
+.suchtreffer .sym2{font-size:1.4rem;width:2rem;text-align:center}
+.versteckt{display:none !important}
+@media (max-width:480px){
+  .hauptkacheln{grid-template-columns:1fr 1fr;gap:10px}
+  .hauptkacheln .kachel{padding:10px 12px;gap:4px}
+  .hauptkacheln .kachel .klein{display:none}
+  .hauptkacheln .kachel b{font-size:.95rem}
+  details.gruppenbox>.kacheln{padding:4px 10px 12px}
+}
 </style>
 </head>
 <body>
@@ -319,50 +355,180 @@ function konfetti(){
   document.body.appendChild(box); setTimeout(()=>box.remove(), 3800);
 }
 function kopf(){
+  app.classList.remove("breit");
   const [n,m]=gesamtSterne();
   return '<header class="kopf"><h1>✒️ Federleicht<small>Schreibtraining Deutsch</small></h1><span class="sterne-gesamt">★ '+n+' / '+m+'</span></header>';
 }
 
 // ---------- Startseite ----------
+// Übersicht: Gruppen zum Aufklappen, Suche, „Weitermachen“, je Textsorte eine eigene Seite
+let HERKUNFT_TS = null;   // Textsorten-Seite, von der aus eine Übung gestartet wurde (für „zurück“)
+const WERKZEUGE = [["feedback","🔁","Feedback-Schleife","Rückmeldung von der KI holen und selbst überarbeiten."],
+  ["interview","🎭","Interview mit einer Figur","Die KI spielt eine Figur – du prüfst ihre Antworten am Text."],
+  ["sparring","🥊","Gegenargumente-Sparring","Die KI liefert Gegenargumente – du entkräftest sie."],
+  ["quellen","🔗","Quellen prüfen","Angaben der KI Schritt für Schritt überprüfen."]];
+function werkzeugStarten(k){ ({feedback:zeigeFeedback, interview:zeigeInterview, sparring:zeigeSparring, quellen:zeigeQuellen})[k](); }
+function modulFuerTs(ts){
+  const ids = ts === "zusammenfassung" ? ["zf"] : (ts === "perspektivenwechsel" ? ["innerer_monolog"] : [ts]);
+  return UEBUNGEN.module.map((m,i)=>({m,i})).filter(x=>ids.includes(x.m.id));
+}
+function tsHatInhalt(ts){ return KRITERIEN.textsorten[ts] && (modulFuerTs(ts).length || aufgabeFuerTextsorte(ts)); }
+function tsSymbol(ts){ const m = modulFuerTs(ts)[0]; return m ? m.m.symbol : "📝"; }
+function sterneVon(sets){ let n = 0; sets.forEach(s=>n += DB.sterne[s.id] || 0); return [n, sets.length * 3]; }
+function tsSets(ts){ const l = []; modulFuerTs(ts).forEach(({m})=>l.push(...m.sets)); return l; }
+function gruppenListe(){
+  return ["Grundlagen","Mit KI arbeiten"].concat(Object.keys(KRITERIEN.gruppen)).map(g=>{
+    if (KRITERIEN.gruppen[g]){
+      const ts = KRITERIEN.gruppen[g].filter(tsHatInhalt);
+      return {g, art:"ts", liste:ts, sets:[...new Map(ts.flatMap(tsSets).map(s=>[s.id, s])).values()]};
+    }
+    const mods = UEBUNGEN.module.map((m,i)=>({m,i})).filter(x=>x.m.gruppe === g);
+    return {g, art:"mod", liste:mods, sets:mods.flatMap(x=>x.m.sets)};
+  }).filter(x=>x.liste.length);
+}
+function kachelHtml(attr, sym, titel, kurz, fort){ return '<button class="kachel" '+attr+'><span class="sym">'+sym+'</span><b>'+esc(titel)+'</b>'+(kurz ? '<span class="klein">'+esc(kurz)+'</span>' : '')+(fort ? '<span class="fort">'+fort+'</span>' : '')+'</button>'; }
+// Nächste Übung ohne Sterne – zuerst im zuletzt geübten Bereich
+function vorschlag(){
+  const z = DB.zuletzt && setFinden(DB.zuletzt.setId);
+  if (z){ const sets = UEBUNGEN.module[z[0]].sets; for (let si = z[1] + 1; si < sets.length; si++) if (!DB.sterne[sets[si].id]) return [z[0], si]; }
+  for (const gr of gruppenListe()) for (const s of gr.sets){ if (!DB.sterne[s.id]){ const f = setFinden(s.id); if (f) return f; } }
+  return null;
+}
 function zeigeStart(){
   farbeSetzen(null);
-  let h = kopf() + '<p class="muted">Wähle einen Bereich. Jede Übung zeigt dir sofort, was richtig ist – mit Erklärung.</p>';
-  h += '<div class="kacheln"><button class="kachel" data-sa="1"><span class="sym">📝</span><b>Schreibaufgaben</b><span class="klein">Zu jeder Textsorte eine Aufgabe wie bei der Schularbeit – mit Ausgangstext, Checkliste und KI-Vergleich.</span></button><button class="kachel" data-p="1"><span class="sym">🔍</span><b>Eigenen Text prüfen</b><span class="klein">Schreib deinen Text und bekomm Hinweise und eine Checkliste zur Textsorte.</span></button>';
-  h += '<button class="kachel" data-v="1"><span class="sym">🤖</span><b>KI-Text und eigenen Text vergleichen</b><span class="klein">Erst selbst schreiben, dann mit einem KI-Text vergleichen: Was ist besser, was stimmt nicht?</span></button>';
-  h += '<button class="kachel" data-e="1"><span class="sym">📤</span><b>Ergebnis speichern</b><span class="klein">Speichert deine Sterne und Punkte als Datei – zum Abgeben in Teams.</span></button></div>';
-  const reihenfolge = [LK_GRUPPE,"Grundlagen","Mit KI arbeiten"].concat(Object.keys(KRITERIEN.gruppen));
-  reihenfolge.forEach(g=>{
-    const mods = UEBUNGEN.module.map((mo,i)=>({mo,i})).filter(x=>x.mo.gruppe===g);
-    if (!mods.length && g !== LK_GRUPPE) return;
-    const gf = GRUPPENFARBE[g] ? ' style="--g:'+GRUPPENFARBE[g]+'"' : '';
-    h += '<h3 class="gruppe"'+gf+'>'+esc(g)+'</h3><div class="kacheln"'+gf+'>';
-    if (g === LK_GRUPPE) h += '<button class="kachel" data-lk="1"><span class="sym">📂</span><b>Aufgabe meiner Lehrkraft öffnen</b><span class="klein">Aufgabendatei oder Text aus Teams öffnen – mit Übungen zum Text und Aufträgen für die KI.</span>'+(Object.keys(pakete()).length ? '<span class="fort">'+Object.keys(pakete()).length+' geöffnet</span>' : '')+'</button>';
-    mods.forEach(({mo,i})=>{
-      let n=0; mo.sets.forEach(s=>n+=DB.sterne[s.id]||0);
-      h += '<button class="kachel" data-m="'+i+'"><span class="sym">'+mo.symbol+'</span><b>'+esc(mo.titel)+'</b><span class="klein">'+esc(mo.kurz)+'</span><span class="fort">★ '+n+' / '+(mo.sets.length*3)+'</span></button>';
-    });
-    if (g === "Mit KI arbeiten") h += [["feedback","🔁","Feedback-Schleife","Text schreiben, Rückmeldung von der KI holen, selbst überarbeiten – Fassung 1 und 2 im Vergleich."],
-      ["interview","🎭","Interview mit einer Figur","Die KI spielt eine Figur aus einem Text – du prüfst, ob ihre Antworten zum Text passen."],
-      ["sparring","🥊","Gegenargumente-Sparring","Die KI liefert Gegenargumente zu deiner These – du entkräftest sie selbst."],
-      ["quellen","🔗","Quellen prüfen","Gibt es die Studie wirklich? Angaben der KI Schritt für Schritt überprüfen."]]
-      .map(([k,s,t,x])=>'<button class="kachel" data-werk="'+k+'"><span class="sym">'+s+'</span><b>'+t+'</b><span class="klein">'+x+'</span></button>').join("");
-    if (g === "Kreatives Schreiben") h += '<button class="kachel" data-w="1"><span class="sym">🎲</span><b>Schreibwürfel</b><span class="klein">Figur, Ort, Gegenstand und Wendung erwürfeln – und eine Geschichte dazu schreiben.</span></button>';
+  HERKUNFT_TS = null;
+  DB.offen = DB.offen || {};
+  let h = kopf();
+  h += '<div class="suchzeile"><input id="suche" type="search" autocomplete="off" placeholder="🔎 Suchen … z. B. Leserbrief, Operatoren, Metapher" aria-label="Suchen"></div><div id="suchergebnis"></div><div id="startinhalt">';
+  // Weitermachen und Vorschlag
+  const z = DB.zuletzt && setFinden(DB.zuletzt.setId), v = vorschlag();
+  if (z || v){
+    h += '<div class="weiter">';
+    if (z){ const s = UEBUNGEN.module[z[0]].sets[z[1]]; h += '<button class="weiterknopf" data-weiter="'+z[0]+'|'+z[1]+'"><span class="klein2">▶ Weitermachen</span><b>'+esc(s.titel)+'</b><span class="klein2">'+esc(UEBUNGEN.module[z[0]].titel)+' · '+sterneHtml(DB.sterne[s.id] || 0)+'</span></button>'; }
+    if (v && !(z && v[0] === z[0] && v[1] === z[1])){ const s = UEBUNGEN.module[v[0]].sets[v[1]]; h += '<button class="weiterknopf zweit" data-weiter="'+v[0]+'|'+v[1]+'"><span class="klein2">💡 Vorschlag: noch ohne Sterne</span><b>'+esc(s.titel)+'</b><span class="klein2">'+esc(UEBUNGEN.module[v[0]].titel)+'</span></button>'; }
     h += '</div>';
+  }
+  h += '<div class="kacheln hauptkacheln">'
+    + kachelHtml('data-sa="1"', "📝", "Schreibaufgaben", "Zu jeder Textsorte eine Aufgabe wie bei der Schularbeit.")
+    + kachelHtml('data-p="1"', "🔍", "Eigenen Text prüfen", "Hinweise und Checkliste zu deinem Text.")
+    + kachelHtml('data-v="1"', "🤖", "KI-Text vergleichen", "Eigener Text gegen KI-Text: Was stimmt nicht?")
+    + kachelHtml('data-e="1"', "📤", "Ergebnis speichern", "Sterne und Punkte als Datei für Teams.") + '</div>';
+  // Aufgaben der Lehrkraft nur, wenn welche geöffnet sind
+  const lkSets = (UEBUNGEN.module.find(m=>m.id === "lehrkraft") || {sets:[]}).sets;
+  if (Object.keys(pakete()).length){
+    const gf = ' style="--g:'+GRUPPENFARBE[LK_GRUPPE]+'"';
+    h += '<details class="gruppenbox" open'+gf+'><summary><span class="gname">'+esc(LK_GRUPPE)+'</span><span class="ginfo">'+Object.keys(pakete()).length+' Aufgabe(n)</span></summary><div class="kacheln">'
+      + kachelHtml('data-lk="1"', "📂", "Aufgaben meiner Lehrkraft", "Texte und Aufgaben aus Teams – mit Übungen dazu.", lkSets.length ? "★ " + sterneVon(lkSets).join(" / ") : "") + '</div></details>';
+  }
+  gruppenListe().forEach(({g, art, liste, sets})=>{
+    const gf = GRUPPENFARBE[g] ? ' style="--g:'+GRUPPENFARBE[g]+'"' : '';
+    const [n, mx] = sterneVon(sets);
+    h += '<details class="gruppenbox" data-g="'+esc(g)+'"'+(DB.offen[g] ? ' open' : '')+gf+'><summary><span class="gname">'+esc(g)+'</span><span class="ginfo">'+liste.length+(art === "ts" ? " Textsorten" : " Bereiche")+' · ★ '+n+' / '+mx+'</span></summary><div class="kacheln">';
+    if (art === "ts") liste.forEach(ts=>{
+      const s = tsSets(ts), k = KRITERIEN.textsorten[ts], sa = aufgabeFuerTextsorte(ts);
+      h += kachelHtml('data-ts="'+ts+'"', tsSymbol(ts), k.name, [s.length ? s.length + " Übungen" : "", sa ? "Schreibaufgabe" : ""].filter(Boolean).join(" · "), s.length ? "★ " + sterneVon(s).join(" / ") : "");
+    });
+    else liste.forEach(({m, i})=>{ h += kachelHtml('data-m="'+i+'"', m.symbol, m.titel, m.kurz, "★ " + sterneVon(m.sets).join(" / ")); });
+    if (g === "Mit KI arbeiten") h += WERKZEUGE.map(([k,s,t,x])=>kachelHtml('data-werk="'+k+'"', s, t, x, "")).join("");
+    if (g === "Kreatives Schreiben") h += kachelHtml('data-w="1"', "🎲", "Schreibwürfel", "Zutaten erwürfeln und eine Geschichte schreiben.", "");
+    h += '</div></details>';
   });
-  const gl = ' style="--g:'+GRUPPENFARBE["Für Lehrkräfte"]+'"';
-  h += '<h3 class="gruppe"'+gl+'>Für Lehrkräfte</h3><div class="kacheln"'+gl+'><button class="kachel" data-lehr="1"><span class="sym">👩‍🏫</span><b>Aufgabe bereitstellen</b><span class="klein">Eigenen Text und Aufgabenstellung eingeben, eigene Fragen ergänzen – als Datei für Teams speichern.</span></button></div>';
+  h += '<div class="fusszeile">' + (Object.keys(pakete()).length ? '' : '<button class="btn zweit" data-lk="1">📂 Aufgabe meiner Lehrkraft öffnen</button>') + '<button class="btn zweit" data-lehr="1">👩‍🏫 Für Lehrkräfte: Aufgabe bereitstellen</button></div>';
+  h += '</div>';
   app.innerHTML = h;
-  app.querySelector("[data-lk]").onclick = ()=>zeigePakete();
-  app.querySelector("[data-sa]").onclick = ()=>zeigeSchreibaufgaben();
-  app.querySelector("[data-lehr]").onclick = ()=>zeigeLehrkraft();
-  const wk = app.querySelector("[data-w]"); if (wk) wk.onclick = ()=>zeigeWuerfel();
-  const WERKSTATT = {feedback:zeigeFeedback, interview:zeigeInterview, sparring:zeigeSparring, quellen:zeigeQuellen};
-  app.querySelectorAll("[data-werk]").forEach(b=>b.onclick = ()=>WERKSTATT[b.dataset.werk]());
-  app.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>zeigeModul(+b.dataset.m));
-  app.querySelector("[data-p]").onclick=()=>zeigePruefer();
-  app.querySelector("[data-e]").onclick=ergebnisSpeichern;
-  app.querySelector("[data-v]").onclick=()=>zeigeVergleich();
+  app.classList.add("breit");
+  const $$ = s=>app.querySelectorAll(s);
+  $$("[data-lk]").forEach(b=>b.onclick = ()=>zeigePakete());
+  $$("[data-lehr]").forEach(b=>b.onclick = ()=>zeigeLehrkraft());
+  app.querySelector(".hauptkacheln [data-sa]").onclick = ()=>zeigeSchreibaufgaben();
+  app.querySelector("[data-p]").onclick = ()=>zeigePruefer();
+  app.querySelector("[data-e]").onclick = ergebnisSpeichern;
+  app.querySelector("[data-v]").onclick = ()=>zeigeVergleich();
+  $$("[data-w]").forEach(b=>b.onclick = ()=>zeigeWuerfel());
+  $$("[data-werk]").forEach(b=>b.onclick = ()=>werkzeugStarten(b.dataset.werk));
+  $$("[data-m]").forEach(b=>b.onclick = ()=>zeigeModul(+b.dataset.m));
+  $$("[data-ts]").forEach(b=>b.onclick = ()=>zeigeTextsorte(b.dataset.ts));
+  $$("[data-weiter]").forEach(b=>b.onclick = ()=>{ const [mi, si] = b.dataset.weiter.split("|").map(Number); starteSet(mi, si); });
+  $$("details.gruppenbox[data-g]").forEach(d=>d.addEventListener("toggle", ()=>{ DB.offen[d.dataset.g] = d.open; speichern(DB); }));
+  const suche = document.getElementById("suche");
+  suche.addEventListener("input", ()=>sucheZeigen(suche.value));
+  if (LETZTE_SUCHE){ suche.value = LETZTE_SUCHE; sucheZeigen(suche.value); }   // nur bis zum Neuladen der Seite
   oben();
+}
+
+// ---- Suche über Textsorten, Bereiche, Übungen, Schreibaufgaben und Werkzeuge ----
+function suchNorm(s){ return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/ß/g, "ss"); }
+let SUCHINDEX = null;
+function suchindex(){
+  if (SUCHINDEX) return SUCHINDEX;
+  const l = [];
+  Object.entries(KRITERIEN.textsorten).forEach(([ts, k])=>{ if (tsHatInhalt(ts)) l.push({art:"Textsorte", sym:tsSymbol(ts), titel:k.name, info:k.gruppe, text:k.name + " " + ts, go:()=>zeigeTextsorte(ts)}); });
+  UEBUNGEN.module.forEach((m, mi)=>{
+    if (m.gruppe !== "Schreibaufgaben") l.push({art:"Bereich", sym:m.symbol, titel:m.titel, info:m.gruppe, text:m.titel + " " + m.kurz, go:()=>zeigeModul(mi)});
+    m.sets.forEach((s, si)=>{
+      const inhalt = s.aufgaben.map(a=>[a.frage, a.erklaerung, (a.optionen || []).join(" "), (a.kategorien || []).join(" "), a.figur || ""].join(" ")).join(" ");
+      l.push({art:"Übung", sym:m.symbol, titel:s.titel, info:m.titel, text:s.titel, inhalt, go:()=>starteSet(mi, si)});
+    });
+  });
+  SA.forEach(p=>l.push({art:"Schreibaufgabe", sym:"📝", titel:p.aufgabentitel, info:KRITERIEN.textsorten[p.ts] ? KRITERIEN.textsorten[p.ts].name : "", text:p.aufgabentitel + " " + (p.titel || ""), go:()=>zeigeAufgabeDetail(p.id)}));
+  WERKZEUGE.forEach(([k,s,t,x])=>l.push({art:"KI-Werkstatt", sym:s, titel:t, info:"Mit KI arbeiten", text:t + " " + x, go:()=>werkzeugStarten(k)}));
+  [["Schreibwürfel","🎲",()=>zeigeWuerfel()],["Eigenen Text prüfen","🔍",()=>zeigePruefer()],["KI-Text vergleichen","🤖",()=>zeigeVergleich()],["Schreibaufgaben","📝",()=>zeigeSchreibaufgaben()]]
+    .forEach(([t,s,go])=>l.push({art:"Werkzeug", sym:s, titel:t, info:"", text:t, go}));
+  l.forEach(e=>{ e.n = suchNorm(e.text); e.ni = suchNorm(e.inhalt || ""); });
+  return SUCHINDEX = l;
+}
+let LETZTE_SUCHE = "";
+function sucheZeigen(q){
+  LETZTE_SUCHE = q;
+  const box = document.getElementById("suchergebnis"), start = document.getElementById("startinhalt");
+  const w = suchNorm(q).trim().split(/\s+/).filter(x=>x.length >= 2);
+  if (!w.length){ box.innerHTML = ""; start.classList.remove("versteckt"); return; }
+  start.classList.add("versteckt");
+  const rang = {Textsorte:0, Schreibaufgabe:1, Bereich:2, "KI-Werkstatt":3, Werkzeug:3, "Übung":4};
+  const treffer = suchindex().map(e=>({e, titel:w.every(x=>e.n.includes(x)), inhalt:w.every(x=>(e.n + " " + e.ni).includes(x))}))
+    .filter(t=>t.titel || t.inhalt).sort((a,b)=>(b.titel - a.titel) || (rang[a.e.art] - rang[b.e.art])).slice(0, 30);
+  box.innerHTML = '<div class="karte suchliste">' + (treffer.length ? '<p class="muted" style="margin-top:0">'+treffer.length+(treffer.length === 30 ? '+' : '')+' Treffer</p>' + treffer.map((t,i)=>'<button class="suchtreffer" data-t="'+i+'"><span class="sym2">'+t.e.sym+'</span><span><b>'+esc(t.e.titel)+'</b><br><span class="muted" style="font-size:.85rem">'+esc(t.e.art)+(t.e.info ? ' · '+esc(t.e.info) : '')+(t.titel ? '' : ' · enthält „'+esc(q.trim())+'“')+'</span></span></button>').join("") : '<p class="muted" style="margin:0">Nichts gefunden. Versuch ein anderes Wort, z. B. „Basissatz“ oder „Kommentar“.</p>') + '</div>';
+  box.querySelectorAll("[data-t]").forEach(b=>b.onclick = ()=>treffer[+b.dataset.t].e.go());
+}
+
+// ---- Eine Seite je Textsorte: Übungen, Schreibaufgabe, Merkmale, Werkzeuge ----
+function zeigeTextsorte(ts){
+  const k = KRITERIEN.textsorten[ts];
+  if (!k){ zeigeStart(); return; }
+  HERKUNFT_TS = ts;
+  farbeSetzen(k.gruppe);
+  const sa = aufgabeFuerTextsorte(ts);
+  let h = kopf() + '<button class="zurueck">← Übersicht</button><h2>'+tsSymbol(ts)+' '+esc(k.name)+'</h2><p class="muted" style="margin-top:-6px">'+esc(k.gruppe)+(k.umfang ? ' · Umfang: '+esc(k.umfang) : '')+'</p>';
+  const mods = modulFuerTs(ts);
+  if (mods.length){
+    h += '<div class="karte"><h3 style="margin-top:0">📚 Übungen</h3><div class="setliste">';
+    mods.forEach(({m, i: mi})=>m.sets.forEach((s, si)=>{
+      const fertig = DB.best && DB.best[s.id];
+      h += '<div class="setwrap"><button class="setzeile" data-s="'+mi+'|'+si+'"><span><b>'+esc(s.titel)+'</b><br><span class="muted" style="font-size:.9rem">'+s.aufgaben.length+' Aufgaben'+(s.originaltext ? ' · 📖 mit Text von deiner Lehrkraft' : '')+'</span></span>'+sterneHtml(DB.sterne[s.id] || 0)+'</button>'
+        + (fertig ? '<button class="loeslink" data-l="'+mi+'|'+si+'">📋 Lösungen ansehen</button>' : '<span class="loesgesperrt">🔒 Lösungen nach dem ersten Durchgang</span>') + '</div>';
+    }));
+    h += '</div></div>';
+  }
+  if (sa) h += '<div class="karte"><h3 style="margin-top:0">📝 Schreibaufgabe</h3><p style="margin:0 0 10px">'+esc(sa.aufgabentitel)+'</p><div class="leiste" style="flex-wrap:wrap"><button class="btn" id="tssa">Aufgabe öffnen</button><button class="btn zweit" id="tsschreiben">✍️ Text schreiben und prüfen</button><button class="btn zweit" id="tsvgl">🤖 Mit KI-Text vergleichen</button><button class="btn zweit" id="tsfb">🔁 Feedback-Schleife</button></div></div>';
+  h += '<div class="karte"><h3 style="margin-top:0">✅ Worauf es ankommt</h3>'
+    + [["inhalt","Inhalt"],["struktur","Aufbau"],["sprache","Sprache"]].filter(([f])=>(k[f] || []).length).map(([f,t])=>'<details'+(f === "inhalt" ? ' open' : '')+'><summary>'+t+'</summary><ul style="margin:6px 0 8px 20px;padding:0">'+k[f].map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul></details>').join("")
+    + ((k.typische_fehler || []).length ? '<details><summary>Typische Fehler</summary><ul style="margin:6px 0 8px 20px;padding:0">'+k.typische_fehler.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul></details>' : '') + '</div>';
+  app.innerHTML = h;
+  app.querySelector(".zurueck").onclick = zeigeStart;
+  app.querySelectorAll("[data-s]").forEach(b=>b.onclick = ()=>{ const [mi, si] = b.dataset.s.split("|").map(Number); starteSet(mi, si); });
+  app.querySelectorAll("[data-l]").forEach(b=>b.onclick = ()=>{ const [mi, si] = b.dataset.l.split("|").map(Number); zeigeLoesungen(mi, si); });
+  if (sa){
+    document.getElementById("tssa").onclick = ()=>zeigeAufgabeDetail(sa.id);
+    document.getElementById("tsschreiben").onclick = ()=>zeigePruefer(sa.id);
+    document.getElementById("tsvgl").onclick = ()=>zeigeVergleich("lk_" + sa.id);
+    document.getElementById("tsfb").onclick = ()=>zeigeFeedback(sa.id);
+  }
+  oben();
+}
+// „Zurück“ aus Übung, Ergebnis und Lösungen: zur Textsorten-Seite, wenn man von dort kam
+function zurueckZu(mi){
+  const mo = UEBUNGEN.module[mi];
+  if (HERKUNFT_TS && modulFuerTs(HERKUNFT_TS).some(x=>x.i === mi)) zeigeTextsorte(HERKUNFT_TS); else zeigeModul(mi);
 }
 
 // ---------- Dateien zum Abgeben (z. B. in Teams) ----------
@@ -399,6 +565,7 @@ function ergebnisSpeichern(){ dateiSpeichern("Schreibtraining_Ergebnis_"+datumKu
 function zeigeModul(mi){
   const mo = UEBUNGEN.module[mi];
   farbeSetzen(mo.gruppe);
+  HERKUNFT_TS = null;
   let h = kopf() + '<button class="zurueck">← Übersicht</button><h2>'+mo.symbol+' '+esc(mo.titel)+'</h2><p class="muted">'+esc(mo.kurz)+'</p><div class="setliste">';
   mo.sets.forEach((s,si)=>{
     const fertig = DB.best && DB.best[s.id];
@@ -420,6 +587,7 @@ function zeigeModul(mi){
 let L = null; // laufender Durchgang
 function starteSet(mi,si){
   L = { mi, si, mo:UEBUNGEN.module[mi], set:UEBUNGEN.module[mi].sets[si], idx:0, punkte:0, max:0 };
+  DB.zuletzt = {setId:L.set.id}; speichern(DB);
   farbeSetzen(L.mo.gruppe);
   zeigeAufgabe();
 }
@@ -455,7 +623,7 @@ function zeigeAufgabe(){
       + '<p class="muted" style="font-size:.9rem">Lies zuerst diesen Text. Du bekommst ihn von deiner Lehrerin oder deinem Lehrer (z. B. in Teams oder auf Papier). Hat sie oder er eine Aufgabendatei bereitgestellt, öffne sie unter „📂 Aufgabe meiner Lehrkraft öffnen“ – dann steht der Text hier.</p></details>'; }
   h += '<div class="karte"><div class="frage">'+esc(a.frage)+'</div><div id="aufg"></div><div id="rueck"></div><div class="leiste" id="leiste"></div></div>';
   app.innerHTML = h;
-  app.querySelector(".zurueck").onclick = ()=>zeigeModul(L.mi);
+  app.querySelector(".zurueck").onclick = ()=>zurueckZu(L.mi);
   const box = document.getElementById("aufg");
   ({wahl:aufgWahl, mehrfach:aufgMehrfach, zuordnen:aufgZuordnen, luecke:aufgLuecke, reihenfolge:aufgReihenfolge, verbessern:aufgVerbessern, einsetzen:aufgEinsetzen})[a.typ](a, box);
   oben();
@@ -624,7 +792,7 @@ function zeigeLoesungen(mi, si){
   s.aufgaben.forEach((a,i)=>{ a._schluessel = s.id+"#"+i; h += '<div class="loesung"><span class="nr">Aufgabe '+(i+1)+'</span><div class="frage" style="margin:4px 0 6px">'+esc(a.frage)+'</div>'+loesungHtml(a)+'</div>'; });
   h += '</div><div class="leiste"><button class="btn" id="lnochmal">Übung nochmal machen</button><button class="btn zweit" id="ldruck">🖨️ Drucken</button></div>';
   app.innerHTML = h;
-  app.querySelector(".zurueck").onclick = ()=>zeigeModul(mi);
+  app.querySelector(".zurueck").onclick = ()=>zurueckZu(mi);
   document.getElementById("lnochmal").onclick = ()=>starteSet(mi, si);
   document.getElementById("ldruck").onclick = ()=>window.print();
   oben();
@@ -745,9 +913,9 @@ function zeigeErgebnis(){
   h += '<div class="leiste" style="justify-content:center"><button class="btn" id="nochmal">Nochmal</button><button class="btn zweit" id="loes">📋 Lösungen ansehen</button><button class="btn zweit" id="zurm">Andere Übung</button><button class="btn zweit" id="erg">📤 Ergebnis speichern</button></div></div>';
   app.innerHTML = h;
   document.getElementById("erg").onclick = ergebnisSpeichern;
-  app.querySelector(".zurueck").onclick = ()=>zeigeModul(L.mi);
+  app.querySelector(".zurueck").onclick = ()=>zurueckZu(L.mi);
   document.getElementById("nochmal").onclick = ()=>starteSet(L.mi,L.si);
-  document.getElementById("zurm").onclick = ()=>zeigeModul(L.mi);
+  document.getElementById("zurm").onclick = ()=>zurueckZu(L.mi);
   document.getElementById("loes").onclick = ()=>zeigeLoesungen(L.mi, L.si);
   oben();
 }
@@ -1629,6 +1797,7 @@ function aufgabeMaterialHtml(p, offen){
 }
 function zeigeSchreibaufgaben(){
   farbeSetzen(null);
+  HERKUNFT_TS = null;
   let h = kopf() + '<button class="zurueck">← Übersicht</button><h2>📝 Schreibaufgaben</h2><p class="muted">Zu jeder Textsorte eine Aufgabe wie bei der Schularbeit – mit Aufgabenstellung und Ausgangstext. Du schreibst deinen Text, prüfst ihn mit der Checkliste und kannst ihn mit einem KI-Text vergleichen.</p>';
   Object.entries(KRITERIEN.gruppen).forEach(([g, keys])=>{
     const liste = keys.map(aufgabeFuerTextsorte).filter(Boolean);
@@ -1668,7 +1837,9 @@ function zeigeAufgabeDetail(id){
     + (k ? '<details style="margin-top:10px"><summary>✅ Worauf es bei dieser Textsorte ankommt</summary><ul style="margin:6px 0 0 20px;padding:0">'+[].concat(k.inhalt || [], k.struktur || []).map(x=>'<li>'+esc(x)+'</li>').join("")+'</ul></details>' : '')
     + '</div>';
   app.innerHTML = h;
-  app.querySelector(".zurueck").onclick = zeigeSchreibaufgaben;
+  const vonTs = HERKUNFT_TS === p.ts;
+  if (vonTs) app.querySelector(".zurueck").textContent = "← " + (KRITERIEN.textsorten[p.ts] || {name:"Zurück"}).name;
+  app.querySelector(".zurueck").onclick = vonTs ? ()=>zeigeTextsorte(p.ts) : zeigeSchreibaufgaben;
   const $ = x=>document.getElementById(x);
   $("saschreiben").onclick = ()=>zeigePruefer(p.id);
   if ($("saentschl")) $("saentschl").onclick = ()=>starteSet(aeMod, aeSi);
